@@ -22,6 +22,7 @@ It acts as a first-line support system and can escalate to a human agent when re
 | Deployment | AWS (ECS / EC2) + Docker |
 
 ### 🏗 Architecture
+```
 Client → FastAPI → LLM Request Handler → GPT/Claude
       ↓
 Embedding Engine
@@ -29,8 +30,10 @@ Embedding Engine
 FAISS Index
       ↓
 Knowledge Base (PDF/CSV/DOCX)
+```
 
 ### 📂 Project Structure
+```
 ai-support-agent/
 ┣ app/
 ┃ ┣ routers/
@@ -41,6 +44,7 @@ ai-support-agent/
 ┣ Dockerfile
 ┣ requirements.txt
 ┗ README.md
+```
 
 
 ### 📌 How It Works
