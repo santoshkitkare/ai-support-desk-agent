@@ -6,33 +6,34 @@ API_BASE = "http://localhost:8000"
 
 st.set_page_config(page_title="AI Support Desk", layout="wide")
 
-# Persistent session_id
+# Persistent session ID
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
-
 session_id = st.session_state.session_id
 
+# Persistent chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-# ---------------------- TAB NAVIGATION ----------------------
-tab1, tab2, tab3 = st.tabs(["📁 Upload Docs", "💬 Chat", "📊 Dashboard"])
+
+st.title("🤖 AI Support Desk — RAG Chatbot")
 
 
-# ---------------------- UPLOAD PAGE ----------------------
-with tab1:
-    st.header("Upload Knowledge Base Documents")
+# ========================= 1️⃣ UPLOAD SECTION =========================
+st.subheader("📁 Upload Knowledge Base Documents")
 
-    files = st.file_uploader(
-        "Upload PDF / DOCX / CSV / TXT files",
-        type=["pdf", "docx", "csv", "txt"],
-        accept_multiple_files=True,
-    )
+uploaded_files = st.file_uploader(
+    "Upload PDF, DOCX, CSV, or TXT files",
+    type=["pdf", "docx", "csv", "txt"],
+    accept_multiple_files=True,
+)
 
-    if st.button("Upload & Ingest") and files:
-        with st.spinner("Uploading and processing..."):
-            form_data = []
-            for f in files:
-                form_data.append(("files", (f.name, f.read(), f"type")))
-
+if st.button("Upload & Ingest"):
+    if not uploaded_files:
+        st.warning("Please select at least one file.")
+    else:
+        with st.spinner("Uploading & processing..."):
+            form_data = [( "files", (f.name, f.read(), f"type") ) for f in uploaded_files]
             res = requests.post(f"{API_BASE}/docs/upload", files=form_data)
 
         if res.status_code == 200:
@@ -41,59 +42,73 @@ with tab1:
             st.error("Upload failed: " + res.text)
 
 
-# ---------------------- CHAT PAGE ----------------------
-with tab2:
-    st.header("AI Support Chat")
+st.markdown("---")
+# ========================= 2️⃣ CHAT SECTION =========================
+st.subheader("💬 Ask Questions")
 
-    # Persist chat history on UI
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# Display history first
+for role, text in st.session_state.messages:
+    if role == "assistant":
+        st.markdown(f"🟣 **Support Bot:** {text}")
+    else:
+        st.markdown(f"🧑 **You:** {text}")
 
-    for msg in st.session_state.messages:
-        role, text = msg
-        if role == "assistant":
-            st.markdown(f"🟣 **Support Agent:** {text}")
-        else:
-            st.markdown(f"🧑 **You:** {text}")
 
-    user_input = st.chat_input("Ask anything about support, warranty, refund, etc...")
+# Callback runs when Enter is pressed
+def send_message():
+    user_msg = st.session_state.chat_input_text.strip()
+    if not user_msg:
+        return
 
-    if user_input:
-        st.session_state.messages.append(("user", user_input))
+    st.session_state.messages.append(("user", user_msg))
 
+    try:
         res = requests.post(
             f"{API_BASE}/chat",
-            json={"session_id": session_id, "message": user_input},
+            json={"session_id": session_id, "message": user_msg},
+            timeout=60
         )
-
         if res.status_code == 200:
-            data = res.json()
-            ai_reply = data["answer"]
+            ai_reply = res.json().get("answer", "")
             st.session_state.messages.append(("assistant", ai_reply))
         else:
-            st.session_state.messages.append(("assistant", "⚠ Error contacting backend"))
+            st.session_state.messages.append(("assistant", "⚠ Backend error"))
+    except Exception as e:
+        st.session_state.messages.append(("assistant", f"⚠ Request failed: {e}"))
 
-        st.rerun()  # 🔥 ensures chat refreshes immediately
+    # 🔥 this clears textbox on the next rerun
+    st.session_state.pop("chat_input_text", None)
 
 
-# ---------------------- DASHBOARD PAGE ----------------------
-with tab3:
-    st.header("Support Analytics")
+# Render chat input after history (Enter triggers callback)
+st.text_input(
+    "Type message & press Enter:",
+    key="chat_input_text",
+    value=st.session_state.get("chat_input_text", ""),  # 👈 default blank after pop
+    on_change=send_message,
+)
 
-    col1, col2, col3 = st.columns(3)
+st.markdown("<script>document.querySelector('input[type=text]').focus();</script>", unsafe_allow_html=True)
 
+st.markdown("---")
+# ========================= 3️⃣ DASHBOARD SECTION (Lazy Loaded) =========================
+with st.expander("📊 Dashboard — View Analytics", expanded=False):
     try:
         summary = requests.get(f"{API_BASE}/analytics/summary").json()
 
+        col1, col2, col3 = st.columns(3)
         col1.metric("Total Conversations", summary["total_conversations"])
         col2.metric("Escalated to Human", summary["escalated_conversations"])
         col3.metric("Resolution Rate", summary["resolution_rate"])
 
         trending = requests.get(f"{API_BASE}/analytics/trending-queries").json()
 
-        st.subheader("Recent User Questions")
-        for q in trending["latest_user_queries"]:
-            st.write("• " + q)
-
+        st.write("### 🔥 Latest 5 Questions")
+        qs = trending["latest_user_queries"][:5]
+        if qs:
+            for q in qs:
+                st.write("• " + q)
+        else:
+            st.info("Start chatting to populate trending questions.")
     except Exception as e:
-        st.error("Could not load analytics: " + str(e))
+        st.error("Unable to load dashboard: " + str(e))
