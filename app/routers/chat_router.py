@@ -25,7 +25,7 @@ class ChatResponse(BaseModel):
     escalate_to_human: bool = False
     context_docs: Optional[List[str]] = None
 
-
+@router.post("", response_model=ChatResponse)
 @router.post("/", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
@@ -125,3 +125,9 @@ async def chat(
         escalate_to_human=result["escalate_to_human"],
         context_docs=result["context_docs"],
     )
+
+
+
+@router.options("/")
+async def options_handler():
+    return {}    # This makes the preflight return 200 OK
