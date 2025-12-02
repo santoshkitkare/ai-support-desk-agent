@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+sqlalchemy
+alembic
+faiss-cpu
+openai
+python-dotenv
+pypdf2
+python-docx
+pandas
+requests
