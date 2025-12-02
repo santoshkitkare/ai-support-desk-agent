@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import chat_router, docs_router, health_router
+from app.services.db import init_db
 
 app = FastAPI(
     title="AI Support Agent",
@@ -18,6 +19,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.on_event("startup")
+def on_startup():
+    init_db()
 
 @app.get("/")
 def root():

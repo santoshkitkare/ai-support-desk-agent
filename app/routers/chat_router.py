@@ -1,6 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
+
+from sqlalchemy.orm import Session
+
+from app.services.db import get_db
+from app.services import chat_service
+
 
 router = APIRouter()
 
@@ -11,28 +17,46 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    session_id: Optional[str] = None  # future: for conversation tracking
+    session_id: Optional[str] = None  # will be used later when we persist history
     messages: List[ChatMessage]
 
 
 class ChatResponse(BaseModel):
     answer: str
     escalate_to_human: bool = False
-    context_docs: Optional[List[str]] = None  # snippet titles or ids
+    context_docs: Optional[List[str]] = None
 
 
 @router.post("/", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+):
     """
-    Main chat endpoint.
-    For now: just echo last user message with a stub response.
-    Later: RAG + LLM + escalate_to_human.
+    Main chat endpoint with RAG:
+    - Embed last user message
+    - Retrieve relevant chunks from FAISS
+    - Ask LLM with KB context
+    - Return answer + escalate flag + context doc references
     """
-    last_user_msg = next((m.content for m in reversed(request.messages) if m.role == "user"), "")
-    dummy_answer = f"(Stub) You said: {last_user_msg}. RAG + LLM integration is coming."
+    # Get latest user message
+    user_msg = next(
+        (m.content for m in reversed(request.messages) if m.role == "user"),
+        None,
+    )
+    if not user_msg:
+        raise HTTPException(status_code=400, detail="No user message provided")
+
+    history = [{"role": m.role, "content": m.content} for m in request.messages]
+
+    result = chat_service.answer_with_rag(
+        user_query=user_msg,
+        history=history,
+        db=db,
+    )
 
     return ChatResponse(
-        answer=dummy_answer,
-        escalate_to_human=False,
-        context_docs=[]
+        answer=result["answer"],
+        escalate_to_human=result["escalate_to_human"],
+        context_docs=result.get("context_docs", []),
     )
