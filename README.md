@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="AI Support Desk Agent" width="100%">
+</p>
+
 # AI Support Desk Agent (LLM Powered Customer Support Automation)
 
 ### 🚀 Overview
