@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 
 from app.services.config import settings
+from app.services.rerank_service import rerank_chunks
 from app.services.embedding_service import get_embedding
 from app.services.vector_store_service import search_similar
 from app.models.db_models import DocumentChunk
@@ -43,14 +44,33 @@ def retrieve_relevant_chunks(
     )
     chunk_by_id = {c.id: c for c in chunks}
 
-    # Re-order to match FAISS ranking
-    ordered: List[Tuple[DocumentChunk, float]] = []
+   # 2) Prepare for reranker
+    candidates: List[Tuple[int, str]] = []
     for cid, dist in results:
-        chunk = chunk_by_id.get(cid)
-        if chunk is not None:
-            ordered.append((chunk, dist))
+        ch = chunk_by_id.get(cid)
+        if ch is None:
+            continue
+        candidates.append((cid, ch.content))
 
-    return ordered
+    if not candidates:
+        return []
+
+    # 3) Cross-encoder rerank
+    reranked = rerank_chunks(
+        query=query,
+        candidates=candidates,
+        top_k=settings.TOP_K_RERANK,  # e.g. 5
+    )
+
+    # Build final list of (DocumentChunk, score)
+    final: List[Tuple[DocumentChunk, float]] = []
+    for cid, _, score in reranked:
+        ch = chunk_by_id.get(cid)
+        if ch:
+            final.append((ch, score))
+
+
+    return final
 
 
 def build_context_from_chunks(
@@ -63,10 +83,10 @@ def build_context_from_chunks(
     sections: List[str] = []
     context_docs: List[str] = []
 
-    for chunk, dist in chunks_with_scores:
+    for idx, (chunk, dist) in enumerate(chunks_with_scores, start=1):
         doc = chunk.document  # via relationship
         header = (
-            f"[Doc: {doc.filename} | doc_id={doc.id} | "
+            f"[Snippet {idx} | Doc: {doc.filename} | doc_id={doc.id} | "
             f"chunk_id={chunk.id} | distance={dist:.4f}]"
         )
         sections.append(f"{header}\n{chunk.content}")
@@ -107,18 +127,34 @@ def call_llm_with_rag(
     """
     _ensure_openai()
 
+    # system_msg = (
+    #     "You are an AI support agent for a company. "
+    #     "You answer ONLY using the provided knowledge base context. "
+    #     "If the context does not clearly contain the answer, "
+    #     "you must set \"escalate_to_human\" to true and explain briefly "
+    #     "why a human agent is needed.\n\n"
+    #     "Return your answer as STRICT JSON with keys:\n"
+    #     "  - answer (string)\n"
+    #     "  - escalate_to_human (boolean)\n"
+    #     "  - confidence (number between 0 and 1)\n"
+    #     "Do not include markdown, code fences, or any extra text outside the JSON."
+    # )
     system_msg = (
-        "You are an AI support agent for a company. "
-        "You answer ONLY using the provided knowledge base context. "
-        "If the context does not clearly contain the answer, "
-        "you must set \"escalate_to_human\" to true and explain briefly "
-        "why a human agent is needed.\n\n"
-        "Return your answer as STRICT JSON with keys:\n"
+        "You are an AI support agent for a company.\n"
+        "You must answer ONLY using the provided knowledge base context snippets.\n"
+        "If the answer is not clearly contained in the context, you MUST say you "
+        "don't know and set \"escalate_to_human\" to true.\n\n"
+        "Rules:\n"
+        "- Do NOT invent policies, prices, dates, or procedures.\n"
+        "- Prefer precise, concise responses.\n"
+        "- If multiple snippets disagree, mention that and escalate.\n\n"
+        "Return STRICT JSON with keys:\n"
         "  - answer (string)\n"
         "  - escalate_to_human (boolean)\n"
         "  - confidence (number between 0 and 1)\n"
-        "Do not include markdown, code fences, or any extra text outside the JSON."
+        "Do not include markdown, code fences, or any text outside the JSON."
     )
+
 
     messages = [
         {"role": "system", "content": system_msg},
@@ -132,9 +168,16 @@ def call_llm_with_rag(
             }
         )
 
-    user_content = f"User question:\n{query}"
+    user_content = (
+        "User question:\n"
+        f"{query}\n\n"
+        "Use only the following context snippets to answer."
+        "If the context is insufficient, escalate:\n"
+        f"{context_text}"
+    )
+    
     if history_text:
-        user_content += f"\n\nConversation history:\n{history_text}"
+        user_content += f"\n\nRecent conversation history (for tone only, not facts):\n{history_text}"
 
     messages.append({"role": "user", "content": user_content})
 
@@ -180,7 +223,7 @@ def answer_with_rag(
     chunks_with_scores = retrieve_relevant_chunks(
         user_query,
         db=db,
-        top_k=settings.TOP_K,
+        top_k=settings.TOP_K_RETRIEVER,
     )
 
     if not chunks_with_scores:

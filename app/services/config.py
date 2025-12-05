@@ -18,6 +18,13 @@ class Settings:
     RAW_DOCS_DIR: str = os.path.join(DATA_DIR, "raw_docs")
     FAISS_INDEX_DIR: str = os.path.join(DATA_DIR, "faiss_index")
 
+    # Embeddings (HF)
+    HF_EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"
+
+    # Retrieval settings
+    TOP_K_RETRIEVER: int = 20   # initial FAISS candidates
+    TOP_K_RERANK: int = 5       # final chunks sent to LLM
+
     # RAG / business rules
     TOP_K: int = 5
     ESCALATION_CONFIDENCE_THRESHOLD: float = 0.55

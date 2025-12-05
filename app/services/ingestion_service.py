@@ -11,7 +11,7 @@ from app.models.db_models import Document, DocumentChunk
 from app.utils.pdf_parser import extract_text_from_pdf
 from app.utils.docx_parser import extract_text_from_docx
 from app.utils.csv_parser import extract_text_from_csv
-from app.utils.chunking import simple_split
+from app.utils.chunking import split_by_chars
 from app.services.embedding_service import get_embeddings
 from app.services.vector_store_service import add_embeddings, init_index
 
@@ -83,7 +83,7 @@ def ingest_uploaded_files(files: List[UploadFile], db: Session) -> List[int]:
 
         # Extract & chunk
         text = _extract_text_by_ext(path, ext)
-        chunks = simple_split(text, max_tokens=500, overlap=50)
+        chunks = split_by_chars(text, chunk_size=500, overlap=50)
 
         if not chunks:
             # no text; skip this doc
