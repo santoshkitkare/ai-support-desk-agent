@@ -30,7 +30,21 @@ from app.services.db import get_db
 from app.services import chat_service
 from app.services import conversation_service
 
+from app.agents.supervisor import SupervisorAgent
+from app.agents.rag_tool import RAGTool
+from app.agents.query_rewriter import QueryRewriter
+from app.utils.llm_client import call_llm
+
+
 router = APIRouter()
+
+rag_tool = RAGTool()
+rewriter = QueryRewriter(call_llm)
+supervisor = SupervisorAgent(
+    rag_tool=rag_tool,
+    llm=call_llm,
+    rewriter=rewriter,
+)
 
 
 class ChatMessage(BaseModel):
@@ -128,7 +142,12 @@ async def chat(
     # parse JSON
     # output answer + escalate flag
     # Run RAG + LLM
-    result = chat_service.answer_with_rag(
+    # result = chat_service.answer_with_rag(
+    #     user_query=user_msg,
+    #     history=history,
+    #     db=db,
+    # )
+    result = supervisor.handle(
         user_query=user_msg,
         history=history,
         db=db,
