@@ -1,0 +1,24 @@
+[project]
+name = "ai-support-desk-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.17.2",
+    "faiss-cpu>=1.13.0",
+    "fastapi>=0.123.2",
+    "openai>=2.8.1",
+    "pandas>=2.3.3",
+    "pydantic>=2.12.5",
+    "pypdf2>=3.0.1",
+    "python-docx>=1.2.0",
+    "python-dotenv>=1.2.1",
+    "python-multipart>=0.0.20",
+    "requests>=2.32.5",
+    "sentence-transformers>=5.1.2",
+    "sqlalchemy>=2.0.44",
+    "streamlit>=1.51.0",
+    "torch>=2.9.1",
+    "uvicorn[standard]>=0.38.0",
+]
