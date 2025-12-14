@@ -99,12 +99,39 @@ for role, text in st.session_state.messages:
         st.markdown(f"🧑 **You:** {text}")
 
 
+# # Callback runs when Enter is pressed
+# def send_message():
+#     user_msg = st.session_state.chat_input_text.strip()
+#     if not user_msg:
+#         return
+
+#     st.session_state.messages.append(("user", user_msg))
+
+#     try:
+#         res = requests.post(
+#             f"{API_BASE}/chat",
+#             json={"session_id": session_id, "message": user_msg},
+#             timeout=60
+#         )
+#         if res.status_code == 200:
+#             ai_reply = res.json().get("answer", "")
+#             st.session_state.messages.append(("assistant", ai_reply))
+#         else:
+#             st.session_state.messages.append(("assistant", "⚠ Backend error"))
+#     except Exception as e:
+#         st.session_state.messages.append(("assistant", f"⚠ Request failed: {e}"))
+
+#     # This line is chef’s kiss:
+#     #   This forces Streamlit to reset the textbox on rerun — essential for smooth UX.
+#     # 🔥 this clears textbox on the next rerun
+#     st.session_state.pop("chat_input_text", None)
 # Callback runs when Enter is pressed
 def send_message():
     user_msg = st.session_state.chat_input_text.strip()
     if not user_msg:
         return
 
+    # 1️⃣ Store user message
     st.session_state.messages.append(("user", user_msg))
 
     try:
@@ -113,18 +140,48 @@ def send_message():
             json={"session_id": session_id, "message": user_msg},
             timeout=60
         )
+
         if res.status_code == 200:
-            ai_reply = res.json().get("answer", "")
+            data = res.json()
+
+            # Core answer
+            ai_reply = data.get("answer", "")
             st.session_state.messages.append(("assistant", ai_reply))
+
+            # 2️⃣ Phase 3B — Confidence & Escalation UI (assistant-side metadata)
+            confidence = data.get("confidence")
+            confidence_level = data.get("confidence_level")
+            escalation_reason = data.get("escalation_reason")
+
+            # Attach metadata as a system-style message
+            if confidence_level or escalation_reason:
+                meta_lines = []
+
+                if confidence_level and confidence is not None:
+                    if confidence_level == "High":
+                        meta_lines.append(f"🟢 **High confidence** ({confidence:.2f})")
+                    elif confidence_level == "Medium":
+                        meta_lines.append(f"🟡 **Medium confidence** ({confidence:.2f})")
+                    else:
+                        meta_lines.append(f"🔴 **Low confidence** ({confidence:.2f})")
+
+                if escalation_reason:
+                    meta_lines.append(f"⚠️ **Escalation reason:** {escalation_reason}")
+
+                # This keeps your chat history clean and readable
+                st.session_state.messages.append(
+                    ("system", "\n".join(meta_lines))
+                )
+
         else:
             st.session_state.messages.append(("assistant", "⚠ Backend error"))
+
     except Exception as e:
         st.session_state.messages.append(("assistant", f"⚠ Request failed: {e}"))
 
-    # This line is chef’s kiss:
-    #   This forces Streamlit to reset the textbox on rerun — essential for smooth UX.
-    # 🔥 this clears textbox on the next rerun
+    # 🔥 Clear textbox on rerun (chef’s kiss remains untouched)
     st.session_state.pop("chat_input_text", None)
+
 
 
 # Enter-to-send message field:

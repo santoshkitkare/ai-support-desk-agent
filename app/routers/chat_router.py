@@ -66,6 +66,17 @@ class ChatRequest(BaseModel):
     session_id: str
     message: str
 
+
+def map_confidence_level(confidence: float | None) -> str | None:
+    if confidence is None:
+        return None
+    if confidence >= 0.8:
+        return "High"
+    if confidence >= 0.5:
+        return "Medium"
+    return "Low"
+
+
 # 📤 ChatResponse
 # Returned back to UI:
 # - answer → LLM’s final response
@@ -82,6 +93,11 @@ class ChatResponse(BaseModel):
     answer: str
     escalate_to_human: bool = False
     context_docs: Optional[List[str]] = None
+    
+    # Phase 3B additions (optional fields)
+    confidence: Optional[float] = None
+    confidence_level: Optional[str] = None
+    escalation_reason: Optional[str] = None
 
 # 🔌 2. The Chat Endpoint
 @router.post("", response_model=ChatResponse)
@@ -165,9 +181,12 @@ async def chat(
         )
 
         return ChatResponse(
-            answer=guardrail_result["reason"],
+            answer="Your request can’t be processed due to safety or privacy reasons.",
             escalate_to_human=False,
             context_docs=[],
+            confidence=None,
+            confidence_level=None,
+            escalation_reason=guardrail_result["reason"],
         )
     
     result = supervisor.handle(
@@ -192,11 +211,24 @@ async def chat(
     )
 
     # Step 7 → Return Response
+    # return ChatResponse(
+    #     answer=result["answer"],
+    #     escalate_to_human=result["escalate_to_human"],
+    #     context_docs=result.get("context_docs", []),
+    # )
     return ChatResponse(
-        answer=result["answer"],
-        escalate_to_human=result["escalate_to_human"],
-        context_docs=result.get("context_docs", []),
-    )
+    answer=result["answer"],
+    escalate_to_human=result["escalate_to_human"],
+    context_docs=result.get("context_docs", []),
+    confidence=result.get("confidence"),
+    confidence_level=map_confidence_level(result.get("confidence")),
+    escalation_reason=(
+        "Low confidence in retrieved knowledge"
+        if result.get("escalate_to_human")
+        else None
+    ),
+)
+
     
 
 # 🧯 8. OPTIONS Handler → CORS Preflight
