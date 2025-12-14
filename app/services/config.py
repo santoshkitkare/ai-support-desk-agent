@@ -1,9 +1,23 @@
+##############################################################################
+# File: 🚀 config.py — The Global Configuration Brain
+# This file centralizes every setting your system depends on:
+# - environment
+# - OpenAI keys
+# - model names
+# - filesystem paths
+# - embedding model
+# - RAG parameters
+# - escalation logic
+##############################################################################
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
+# 🧠 2. Settings Class Values
+# Everything inside Settings becomes globally accessible as settings.
+# Clean, object-oriented config.
 class Settings:
     PROJECT_NAME: str = "AI Support Agent"
     ENV: str = os.getenv("ENV", "dev")

@@ -79,11 +79,13 @@ Conversation DB <-- For chat history & analytics
 ```
 ai-support-agent/
 ┣ app/
+┃ ┣ models/
 ┃ ┣ routers/
 ┃ ┣ services/
 ┃ ┣ utils/
 ┃ ┗ main.py
 ┣ data/
+┣ frontend/
 ┣ Dockerfile
 ┣ requirements.txt
 ┗ README.md
