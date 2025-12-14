@@ -35,6 +35,10 @@ from app.agents.rag_tool import RAGTool
 from app.agents.query_rewriter import QueryRewriter
 from app.utils.llm_client import call_llm
 
+from app.agents.guardrail_agent import GuardrailAgent
+from app.utils.llm_client import call_llm
+
+
 
 router = APIRouter()
 
@@ -45,6 +49,7 @@ supervisor = SupervisorAgent(
     llm=call_llm,
     rewriter=rewriter,
 )
+guardrail = GuardrailAgent(call_llm)
 
 
 class ChatMessage(BaseModel):
@@ -147,6 +152,24 @@ async def chat(
     #     history=history,
     #     db=db,
     # )
+    
+    # 🚧 Guardrail Check (Phase 3A)
+    guardrail_result = guardrail.check(user_msg)
+
+    if not guardrail_result["allowed"]:
+        conversation_service.add_message(
+            db=db,
+            conversation_id=conv.id,
+            role="assistant",
+            content=guardrail_result["reason"],
+        )
+
+        return ChatResponse(
+            answer=guardrail_result["reason"],
+            escalate_to_human=False,
+            context_docs=[],
+        )
+    
     result = supervisor.handle(
         user_query=user_msg,
         history=history,
